@@ -1,23 +1,10 @@
-import {initializeApp,getApps,cert} from 'firebase-admin/app';
-import {getAuth,type DecodedIdToken} from 'firebase-admin/auth';
-import {getFirestore,FieldValue,type Transaction} from 'firebase-admin/firestore';
+import {type DecodedIdToken} from 'firebase-admin/auth';
+import {FieldValue,type Transaction} from 'firebase-admin/firestore';
 import {createHash,randomUUID} from 'node:crypto';
+import {adminApp as app, adminDb as db, adminAuth as auth} from './firebase-admin-init';
 import {DEFAULT_PREFERENCES,DEFAULT_CONFIGURATION,CAPABILITIES,parsePreferences} from '../../lib/preferences';
 import {securityEnabled,enforceSecuritySession} from './account-security';
-function initApp(){
- if(getApps().length>0)return getApps()[0];
- const sa=process.env.FIREBASE_SERVICE_ACCOUNT;
- if(sa){
-  try{
-   const creds=typeof sa==='string'?JSON.parse(sa):sa;
-   return initializeApp({credential:cert(creds),projectId:creds.project_id||'orin-99951'});
-  }catch(e){console.warn('Could not parse FIREBASE_SERVICE_ACCOUNT JSON:',e);}
- }
- return initializeApp({projectId:'orin-99951'});
-}
-export const app=initApp();
-export const db=getFirestore(app);
-export const auth=getAuth(app);
+export {app, db, auth};
 export const OWNER='khtaub7341@gmail.com';
 export type Data=Record<string,any>;
 export type Identity={id:string;name:string;email:string;verified:boolean;authTime?:number;securitySessionId?:string};

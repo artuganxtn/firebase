@@ -56,10 +56,19 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, app: 'ORIN', status: 'healthy', timestamp: Date.now() });
 });
 
+// Automatically load .env if available (Node 21.7+)
+try {
+  if (typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile();
+  }
+} catch {
+  // Ignore if .env is missing or variables are provided by host environment
+}
+
 // Mount specialized handlers
 // Payments (NOWPayments invoices, status refresh, IPN webhook)
 app.use('/api/payments', (req, res) => {
-  req.path = '/api/payments' + req.url;
+  req.url = '/api/payments' + req.url;
   paymentsHandle(req, res);
 });
 app.use('/orinPayments', (req, res) => {
@@ -68,7 +77,7 @@ app.use('/orinPayments', (req, res) => {
 
 // Security (2FA, sessions, passkeys, step-up)
 app.use('/api/security', (req, res) => {
-  req.path = '/api/security' + req.url;
+  req.url = '/api/security' + req.url;
   securityHandle(req, res);
 });
 app.use('/orinSecurity', (req, res) => {
@@ -83,17 +92,17 @@ app.use('/orinIdentity', (req, res) => {
   identityHandle(req, res);
 });
 app.post('/send-code', (req, res) => {
-  req.path = '/send-code';
+  req.url = '/send-code';
   identityHandle(req, res);
 });
 app.post('/register', (req, res) => {
-  req.path = '/register';
+  req.url = '/register';
   identityHandle(req, res);
 });
 
 // Main API (Gemini Assistant, Control Center, Referral, Programs, Settings)
 app.use('/api', (req, res) => {
-  req.path = '/api' + req.url;
+  req.url = '/api' + req.url;
   handle(req, res);
 });
 app.use('/orinApi', (req, res) => {

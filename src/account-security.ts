@@ -1,12 +1,11 @@
 /** Real ORIN session + MFA authority. All documents here are server-write-only. */
-import {initializeApp,getApps} from 'firebase-admin/app';
-import {getAuth,type DecodedIdToken} from 'firebase-admin/auth';
-import {getFirestore,type Transaction} from 'firebase-admin/firestore';
+import {type DecodedIdToken} from 'firebase-admin/auth';
+import {type Transaction} from 'firebase-admin/firestore';
+import {adminApp as app, adminDb as securityDb, adminAuth as securityAuth} from './firebase-admin-init';
 import {generateRegistrationOptions,verifyRegistrationResponse,generateAuthenticationOptions,verifyAuthenticationResponse} from '@simplewebauthn/server';
 import {opaque,digest,equal,masterKey,seal,unseal,newTotpSecret,verifyTotp,newRecoveryCodes,recoveryHash,recoveryFormat,failureDelay,safeDevice} from './account-security-crypto';
 import type {SecurityAction,SecurityDevice,SecuritySessionBundle,SecurityState} from '../../lib/account-security-types';
-const app=getApps()[0]??initializeApp();
-export const securityDb=getFirestore(app),securityAuth=getAuth(app);
+export {securityDb, securityAuth};
 export class SecurityError extends Error{constructor(message:string,public status=400,public code='security-error'){super(message)}}
 const db=securityDb,auth=securityAuth;
 const doc=(c:string,id:string)=>db.collection(c).doc(id);
