@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: orin-backend
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: source/firebase-functions
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ORIN_DEPOSITS_ENABLED
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        value: https://orin-99951.web.app,https://orin-99951.firebaseapp.com
+      - key: ORIN_NOWPAYMENTS_API_KEY
+        sync: false
+      - key: ORIN_NOWPAYMENTS_IPN_SECRET
+        sync: false
+      - key: ORIN_PAYMENTS_CALLBACK_URL
+        sync: false
+      - key: ORIN_SUPPORT_AI_API_KEY
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false

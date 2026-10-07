@@ -1,0 +1,26 @@
+{
+  "name": "orin-firebase-backend",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "13.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.6.0"
+  },
+  "devDependencies": {
+    "@levischuck/tiny-cbor": "0.2.11",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "esbuild": "0.28.0"
+  }
+}
