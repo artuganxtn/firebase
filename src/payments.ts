@@ -70,7 +70,7 @@ export function paymentService(provider:Pick<NowPayments,'create'|'get'>,ipnSecr
  }
  async function list(u:Identity,accountId:string){
   safeId(accountId);const account=(await db.doc(`sparkTradingAccounts/${u.id}/accounts/${accountId}`).get()).data();if(!account||account.ownerId!==u.id)throw new ApiError('الحساب غير متاح.',404);
-  const result=await db.collection('orinDeposits').where('uid','==',u.id).where('accountId','==',accountId).orderBy('createdAt','desc').limit(20).get();return result.docs.map(d=>depositView(d.data()));
+  const result=await db.collection('orinDeposits').where('uid','==',u.id).where('accountId','==',accountId).limit(50).get();return result.docs.map(d=>depositView(d.data())).sort((a,b)=>b.createdAt-a.createdAt).slice(0,20);
  }
  async function webhook(body:Data,signature:string){
   if(!validIpn(body,signature,ipnSecret))throw new ApiError('Invalid payment notification signature',401);
