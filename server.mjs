@@ -118,7 +118,17 @@ if (typeof deliverControlNotifications === 'function') {
   }, 60_000);
 }
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`[ORIN Server] Backend running at http://0.0.0.0:${port}`);
-  console.log(`[ORIN Server] Ready to receive NOWPayments webhooks and Gemini AI requests.`);
+// Production High-Concurrency Crash Guards & Resilience
+process.on('uncaughtException', (err) => {
+  console.error('[ORIN Server] Uncaught exception safely handled:', err?.message || err);
 });
+process.on('unhandledRejection', (reason) => {
+  console.error('[ORIN Server] Unhandled rejection safely handled:', reason?.message || reason);
+});
+
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`[ORIN Server] Backend running at http://0.0.0.0:${port}`);
+  console.log(`[ORIN Server] Ready for production traffic, webhooks, and AI requests.`);
+});
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;

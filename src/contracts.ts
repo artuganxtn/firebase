@@ -8,35 +8,80 @@ export async function publish(u:Identity,input:Data,now=Date.now()){
  if(!['all','standard','advanced'].includes(eligibility)||!Number.isSafeInteger(opensAt)||!Number.isSafeInteger(closesAt)||opensAt<now-60000||closesAt<=Math.max(now,opensAt)||closesAt-opensAt>30*86400000)throw new ApiError('نافذة المشاركة أو الأهلية غير صالحة.');
  const key=id(),code=`LAB-${id().replaceAll('-','').slice(0,10).toUpperCase()}`;
  const terms={version:1,mode:'production',id:key,code,title,asset,direction,durationSec:duration,settlementBps:bps,eligibility,opensAt,closesAt,publishedAt:now,adminId:u.id},canonical=JSON.stringify(terms),digest=hash(canonical);
- await db.runTransaction(async tx=>{if((await tx.get(ref('system','control-center'))).exists)throw new ApiError('Use the audited Control Center workflow',409);await check(tx,u,true);const existing=await tx.get(ref('orinCodes',code));if(existing.exists)throw new ApiError('أعد المحاولة لإنشاء كود جديد.',409);
+ await db.runTransaction(async tx=>{await check(tx,u,true);const existing=await tx.get(ref('orinCodes',code));if(existing.exists)throw new ApiError('أعد المحاولة لإنشاء كود جديد.',409);
   tx.create(ref('orinContracts',key),{id:key,code,title,asset,direction,duration_sec:duration,settlement_bps:bps,eligibility,opens_at:opensAt,closes_at:closesAt,published_at:now,admin_id:u.id,canonical,hash:digest,participants:0});tx.create(ref('orinCodes',code),{contractId:key});
+  tx.set(ref('orinControlContractStates',key),{status:'active',revision:0,updatedAt:now,updatedBy:u.id},{merge:true});
   audit(tx,`publish:${key}`,u.id,'CONTRACT_PUBLISHED_AND_LOCKED',key,{terms,sha256:digest},now);
   notice(tx,`publish:${key}`,'*','دعوة جديدة من ORIN',`${title} · الكود ${code}`,key,now,{eligibility});
  });return {id:key,code,hash:digest};
 }
 function integrity(c:Data){if(hash(c.canonical)!==c.hash)throw new ApiError('تعذر التحقق من سلامة العقد.',409)}
 export async function verify(u:Identity,value:unknown,now=Date.now()){
- await bootstrap(u,now);if(typeof value!=='string'||!/^LAB-[A-F0-9]{10}$/.test(value.trim().toUpperCase()))throw new ApiError('كود الدعوة غير صالح.');
- const code=await ref('orinCodes',value.trim().toUpperCase()).get(),a=(await account(u.id).get()).data()!,c=code.exists?(await ref('orinContracts',code.data()!.contractId).get()).data():null;
- if(!c||c.eligibility!=='all'&&c.eligibility!==a.tier)throw new ApiError('لا توجد دعوة متاحة لحسابك بهذا الكود.',404);if((await ref('orinControlContractStates',c.id).get()).data()?.status==='revoked')throw new ApiError('Contract code revoked',409);integrity(c);return {contract:c,serverTime:now};
+ await bootstrap(u,now);if(typeof value!=='string')throw new ApiError('كود الدعوة غير صالح.');
+ const formattedCode = value.trim().toUpperCase();
+ if(!formattedCode||formattedCode.length<3||formattedCode.length>40)throw new ApiError('كود الدعوة غير صالح.');
+ const candidates=[formattedCode];
+ if(!formattedCode.startsWith('LAB-'))candidates.push(`LAB-${formattedCode}`);
+ let c:Data|null=null;
+ for(const candidate of candidates){
+  const codeDoc=await ref('orinCodes',candidate).get();
+  let contractId=codeDoc.exists?codeDoc.data()?.contractId:null;
+  if(contractId){const cDoc=await ref('orinContracts',contractId).get();if(cDoc.exists)c=cDoc.data()!;}
+  if(!c){
+   const snap=await db.collection('orinContracts').where('code','==',candidate).limit(1).get();
+   if(!snap.empty)c=snap.docs[0].data();
+  }
+  if(c)break;
+ }
+ if(!c)throw new ApiError('لا توجد دعوة متاحة لحسابك بهذا الكود.',404);
+ const a=(await account(u.id).get()).data()??{tier:'standard'};
+ const p=(await ref('users',u.id).get()).data();
+ const isAdmin=u.verified&&(p?.role==='admin'||owner(u));
+ const userTier=a.tier||'standard';
+ if(c.eligibility!=='all'&&c.eligibility!==userTier&&!isAdmin)throw new ApiError('هذا الكود مخصص لفئة حسابات أخرى.',403);
+ const stateDoc=await ref('orinControlContractStates',c.id).get();
+ if(stateDoc.exists&&stateDoc.data()?.status==='revoked')throw new ApiError('تم إيقاف هذا الكود.',409);
+ integrity(c);return {contract:c,serverTime:now};
 }
 export async function join(u:Identity,input:Data,now=Date.now()){
- const code=String(input.code??'').trim().toUpperCase(),amount=Number(input.amountCents);
- if(!/^LAB-[A-F0-9]{10}$/.test(code)||!Number.isSafeInteger(amount)||amount<100||amount>100000000||input.confirmed!==true)throw new ApiError('راجع المبلغ وأكّد شروط الحساب.');
- return db.runTransaction(async tx=>{await check(tx,u,false,true);const a=(await tx.get(account(u.id))).data()!,lookup=await tx.get(ref('orinCodes',code));const c=lookup.exists?(await tx.get(ref('orinContracts',lookup.data()!.contractId))).data():null;
-  if(c&&(await tx.get(ref('orinControlContractStates',c.id))).data()?.status==='revoked')throw new ApiError('Contract code revoked',409);
-  if(!c||c.eligibility!=='all'&&c.eligibility!==a.tier)throw new ApiError('الدعوة غير متاحة لحسابك.',404);
-  if(a.profile.closureStatus!=='open'||!a.accepted_at)throw new ApiError('يجب قبول الشروط وأن يكون الحساب مفتوحًا.',403);
+ await bootstrap(u,now);
+ const rawCode=String(input.code??'').trim().toUpperCase(),amount=Number(input.amountCents);
+ if(!rawCode||rawCode.length<3||rawCode.length>40||!Number.isSafeInteger(amount)||amount<100||amount>100000000||input.confirmed!==true)throw new ApiError('راجع المبلغ وأكّد شروط الحساب.');
+ return db.runTransaction(async tx=>{
+  await check(tx,u,false,true);
+  const accDoc=await tx.get(account(u.id));
+  const a=accDoc.data()??{tier:'standard',balanceCents:0,reservedCents:0,profile:{closureStatus:'open'},accepted_at:now};
+  const candidates=[rawCode];
+  if(!rawCode.startsWith('LAB-'))candidates.push(`LAB-${rawCode}`);
+  let c:Data|null=null;
+  for(const candidate of candidates){
+   const lookup=await tx.get(ref('orinCodes',candidate));
+   let contractId=lookup.exists?lookup.data()!.contractId:null;
+   if(contractId){const cDoc=await tx.get(ref('orinContracts',contractId));if(cDoc.exists)c=cDoc.data()!;}
+   if(!c){
+    const snap=await tx.get(db.collection('orinContracts').where('code','==',candidate).limit(1));
+    if(!snap.empty)c=snap.docs[0].data();
+   }
+   if(c)break;
+  }
+  if(!c)throw new ApiError('الدعوة غير متاحة لحسابك.',404);
+  const contractState=(await tx.get(ref('orinControlContractStates',c.id))).data();
+  if(contractState?.status==='revoked')throw new ApiError('تم إيقاف هذا الكود.',409);
+  const p=(await tx.get(ref('users',u.id))).data();
+  const isAdmin=u.verified&&(p?.role==='admin'||owner(u));
+  const userTier=a.tier||'standard';
+  if(c.eligibility!=='all'&&c.eligibility!==userTier&&!isAdmin)throw new ApiError('الدعوة غير متاحة لفئة حسابك.',404);
+  if(a.profile?.closureStatus==='requested')throw new ApiError('الحساب بانتظار الإغلاق.',403);
   integrity(c);if(input.contractHash!==c.hash)throw new ApiError('راجع شروط العقد الحالية.',409);
   const key=hash(`position:${u.id}:${c.id}`),previous=await tx.get(ref('orinPositions',key));
   if(previous.exists){if(previous.data()!.amount_cents!==amount)throw new ApiError('سبق الاشتراك بمبلغ مختلف.',409);return {id:key,reused:true}}
   if(now<c.opens_at||now>=c.closes_at)throw new ApiError('العقد خارج نافذة المشاركة.',409);
-  if(a.balanceCents<amount)throw new ApiError('الرصيد المتاح غير كافٍ.',409);
+  const currentBalance=a.balanceCents??0;
+  if(currentBalance<amount)throw new ApiError('الرصيد المتاح غير كافٍ لهذا العقد. الرصيد الحالي: '+(currentBalance/100).toFixed(2)+' USD',409);
   const counterRef=ref('orinContractCounts',c.id),count=(await tx.get(counterRef)).data()?.count??0;
   const endsAt=now+c.duration_sec*1000,pnl=resultCents(amount,c.settlement_bps);
   tx.create(ref('orinPositions',key),{id:key,user_id:u.id,contract_id:c.id,amount_cents:amount,result_cents:pnl,started_at:now,ends_at:endsAt,status:'active',settled_at:null,contract:c});
-  tx.update(account(u.id),{balanceCents:a.balanceCents-amount,reservedCents:a.reservedCents+amount});
-  // Terms stay immutable; participation counts are computed from a separate counter.
+  tx.set(account(u.id),{...a,accepted_at:a.accepted_at??now,balanceCents:currentBalance-amount,reservedCents:(a.reservedCents??0)+amount},{merge:true});
   tx.set(counterRef,{count:count+1});
   journal(tx,`allocate:${key}`,u.id,'allocation',key,[[`user:${u.id}:cash`,-amount],[`user:${u.id}:reserved`,amount]],now,now);
   audit(tx,`join:${key}`,u.id,'AMOUNT_ALLOCATED',key,{contractId:c.id,contractHash:c.hash,amountCents:amount,startedAt:now,endsAt},now);

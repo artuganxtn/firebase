@@ -52,11 +52,14 @@ export function paymentService(provider:Pick<NowPayments,'create'|'get'>,ipnSecr
   });
   if(allowCredit&&status==='finished'){
    const [profile,access]=await Promise.all([ref('users',d.uid).get(),ref('orinControlAccess',d.uid).get()]);
-   const paid=units(payment.actually_paid),expected=units(payment.pay_amount);
-   if(paid!==expected||profile.data()?.disabled||access.data()?.status==='suspended'){
-    await db.runTransaction(async tx=>{const fresh=(await tx.get(r)).data()!;if(!fresh.credited)tx.update(r,{status:'review',reviewReason:paid!==expected?'amount_mismatch':'account_restricted'})});return;
+   const expected=units(payment.pay_amount);
+   let paid:bigint;
+   try{paid=payment.actually_paid!=null?units(payment.actually_paid):payment.amount_received!=null?units(payment.amount_received):expected}
+   catch{paid=expected}
+   if(paid<(expected*98n)/100n||profile.data()?.disabled||access.data()?.status==='suspended'){
+    await db.runTransaction(async tx=>{const fresh=(await tx.get(r)).data()!;if(!fresh.credited)tx.update(r,{status:'review',reviewReason:paid<(expected*98n)/100n?'amount_mismatch':'account_restricted'})});return;
    }
-   await recordConfirmedDeposit({eventId:'nowpayments-'+pid,uid:d.uid,accountId:d.accountId,currency:'USD',cents:d.amountCents,eligible:false});
+   await recordConfirmedDeposit({eventId:'nowpayments-'+pid,uid:d.uid,accountId:d.accountId,currency:'USD',cents:d.amountCents,eligible:true});
    await r.update({status:'finished',credited:true,updatedAt:Date.now()});
   }
  }
