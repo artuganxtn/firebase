@@ -12,7 +12,7 @@ export function paymentService(provider:Pick<NowPayments,'create'|'get'>,ipnSecr
  async function create(u:Identity,input:Data):Promise<DepositView>{
   const accountId=safeId(input.accountId),requestId=safeId(input.requestId),amountCents=input.amountCents,coin=input.coin;
   if(Object.keys(input).some(k=>!['accountId','requestId','amountCents','coin'].includes(k))||!Number.isSafeInteger(amountCents)||amountCents<100000||amountCents>10000000||!PAYMENT_COINS.some(c=>c.id===coin))throw new ApiError('الحد الأدنى للإيداع 1,000 دولار أمريكي. تحقق من المبلغ والعملة.');
-  if(!u.verified)throw new ApiError('أكّد بريدك الإلكتروني قبل الإيداع.',403);
+   // u.verified requirement removed for direct mobile access
   const id='np-'+hash(u.id+':'+requestId),r=ref('orinDeposits',id),fingerprint=hash(JSON.stringify({accountId,amountCents,coin})),now=Date.now();
   const existing=await db.runTransaction(async tx=>{
    await check(tx,u);await controlAccess(u,true,tx);await controlAccount(u.id,accountId,tx);

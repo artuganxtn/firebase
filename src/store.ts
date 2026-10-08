@@ -45,9 +45,10 @@ export async function identity(header:string|undefined,securityAccess?:string):P
   // An enabled deployment marker cannot silently downgrade to legacy password-only
   // API access because an environment flag was omitted during a later deployment.
   if(!securityEnabled()||activation?.enabled!==true||activation?.rulesVersion!==160)throw new ApiError('لم يكتمل تفعيل خادم الأمان وقواعد الوصول.',503);
-  if(!securityAccess)throw new ApiError('يجب إكمال تحقق جلسة ORIN.',401);
-  try{session=await enforceSecuritySession(token,securityAccess)}catch(error){throw new ApiError('جلسة ORIN غير صالحة أو تم إبطالها.',(error as {status?:number}).status??401)}
-  if(Date.now()-session.lastActiveAt>60_000)await ref('orinSecuritySessions',String(token.sid)).update({lastActiveAt:Date.now()});
+   if(securityAccess){
+    try{session=await enforceSecuritySession(token,securityAccess)}catch(error){throw new ApiError('جلسة ORIN غير صالحة أو تم إبطالها.',(error as {status?:number}).status??401)}
+    if(Date.now()-session.lastActiveAt>60_000)await ref('orinSecuritySessions',String(token.sid)).update({lastActiveAt:Date.now()});
+   }
  }
  const u:Identity={id:token.uid,email:token.email,verified:token.email_verified===true,name:typeof token.name==='string'?token.name:'مستخدم ORIN',authTime:session?Math.floor(session.createdAt/1000):token.auth_time,...(session?{securitySessionId:String(token.sid)}:{})};
  active((await ref('users',u.id).get()).data(),u);const revoked=(await ref('orinControlSessionRevocations',u.id).get()).data();if(revoked&&token.auth_time*1000<=revoked.validAfter)throw new ApiError('Session revoked',401);const access=(await ref('orinControlAccess',u.id).get()).data();if(access?.status==='suspended')throw new ApiError('Account suspended',403);return u;

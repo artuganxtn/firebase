@@ -24,9 +24,9 @@ export async function paymentsHandle(req:any,res:any){
   const service=paymentService(new NowPayments(keyVal,callback),secretVal);
   if(req.method==='POST'&&(!req.is('application/json')||!req.body||Array.isArray(req.body)||typeof req.body!=='object'||Buffer.byteLength(JSON.stringify(req.body))>16000))throw new ApiError('بيانات طلب غير صالحة.');
   if(req.path==='/api/payments/nowpayments/ipn'&&req.method==='POST'){res.json(await service.webhook(req.body,req.get('x-nowpayments-sig')??''));return}
-  const user=await identity(req.get('authorization'),req.get('x-orin-session'));
   const enabled=process.env.ORIN_DEPOSITS_ENABLED==='true'&&!!keyVal&&!!secretVal;
-  if(req.method==='GET'&&req.path==='/api/payments/readiness'){res.json({provider:'NOWPayments',deposits:enabled,withdrawals:false,coins:PAYMENT_COINS,...(!enabled?{reason:'activation_pending'}:{})});return}
+  if(req.method==='GET'&&req.path==='/api/payments/readiness'){res.json({provider:'ORIN Pay',deposits:enabled,withdrawals:false,coins:PAYMENT_COINS,...(!enabled?{reason:'activation_pending'}:{})});return}
+  const user=await identity(req.get('authorization'),req.get('x-orin-session'));
   if(req.method==='POST'&&req.path==='/api/payments/deposits'){
    if(!enabled)throw new ApiError('الإيداع بانتظار إكمال إعداد الخدمة.',503);
    res.json(await service.create(user,req.body));return;

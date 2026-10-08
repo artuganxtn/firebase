@@ -38,7 +38,7 @@ export async function context(header:string|undefined,access:string|undefined,me
  return {uid:token.uid,sid:String(token.sid),session,token,ip:meta.ip};
 }
 function freshPrimary(token:DecodedIdToken,now=Date.now()){
- if(token.sid||token.firebase?.sign_in_provider==='custom'||!token.auth_time||now-token.auth_time*1000>120_000||token.auth_time*1000>now+30_000)throw new SecurityError('أعد التحقق من هويتك بكلمة المرور أولًا.',401,'recent-auth-required');
+ if(token.sid||token.firebase?.sign_in_provider==='custom'||!token.auth_time||now-token.auth_time*1000>300_000||token.auth_time*1000>now+30_000)throw new SecurityError('أعد التحقق من هويتك بكلمة المرور أولًا.',401,'recent-auth-required');
 }
 async function primary(raw:unknown,uid?:string){if(typeof raw!=='string'||raw.length>20000)throw new SecurityError('إعادة التحقق مطلوبة.',401);let t:DecodedIdToken;try{t=await auth.verifyIdToken(raw,true)}catch{throw new SecurityError('تعذر التحقق من بيانات الدخول.',401)}freshPrimary(t);if(uid&&t.uid!==uid)throw new SecurityError('إعادة التحقق لا تخص هذا الحساب.',403);const provider=await availableUser(t.uid);if(provider.tokensValidAfterTime&&Date.parse(provider.tokensValidAfterTime)>t.auth_time*1000)throw new SecurityError('أُبطل اعتماد الدخول.',401,'recent-auth-required');return t}
 function factor(profile:any,input:any,uid:string,now:number){
