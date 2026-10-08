@@ -22,8 +22,7 @@ export function active(profile:Data|undefined,u:Identity,admin=false){
 }
 export async function check(tx:Transaction,u:Identity,admin=false,financial=false){
  const [p,access,revoked]=await Promise.all([tx.get(ref('users',u.id)),tx.get(ref('orinControlAccess',u.id)),tx.get(ref('orinControlSessionRevocations',u.id))]);
- if(securityEnabled()||u.securitySessionId){
-  if(!u.securitySessionId)throw new ApiError('يجب إكمال تحقق جلسة ORIN.',401);
+ if(u.securitySessionId){
   const [sessionDoc,securityDoc]=await Promise.all([tx.get(ref('orinSecuritySessions',u.securitySessionId)),tx.get(ref('orinAccountSecurity',u.id))]);
   const session=sessionDoc.data();
   if(!session||session.uid!==u.id||session.status!=='active'||session.expiresAtMs<=Date.now()||session.epoch!==(securityDoc.data()?.epoch??0))throw new ApiError('تم إبطال جلسة ORIN.',401);

@@ -35,6 +35,6 @@ export async function paymentsHandle(req:any,res:any){
   const match=req.path.match(/^\/api\/payments\/deposits\/(np-[a-f0-9]{64})$/);
   if(req.method==='GET'&&match){res.json(await service.get(user,match[1],req.query.refresh==='true'));return}
   throw new ApiError('المسار غير متاح.',404);
- }catch(error){const status=error instanceof ApiError?error.status:503;if(!(error instanceof ApiError))console.error('ORIN payments request failed',{path:req.path,type:error instanceof Error?error.name:'unknown'});res.status(status).json({error:error instanceof ApiError?error.message:'تعذر الاتصال بخدمة الدفع. راجع حالة الطلب ثم أعد المحاولة.'})}
+ }catch(error:any){const status=error instanceof ApiError?error.status:(typeof error?.status==='number'?error.status:503);const message=error instanceof ApiError?error.message:(typeof error?.message==='string'&&error.message?error.message:'تعذر الاتصال بخدمة الدفع. راجع حالة الطلب ثم أعد المحاولة.');if(!(error instanceof ApiError))console.error('ORIN payments request failed',{path:req.path,error:error?.message||error});res.status(status).json({error:message})}
 }
 export const orinPayments=onRequest({region:'europe-west1',memory:'256MiB',timeoutSeconds:60,minInstances:0,maxInstances:2,concurrency:20,cors:false,secrets:[apiKey,ipnSecret]},paymentsHandle);
